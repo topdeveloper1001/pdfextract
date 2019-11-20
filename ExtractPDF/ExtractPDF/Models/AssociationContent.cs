@@ -3,9 +3,9 @@ using System.Collections.Generic;
 
 namespace ExtractPDF.Models
 {
-    public partial class AssociationType
+    public partial class AssociationContent
     {
-        public AssociationType()
+        public AssociationContent()
         {
             Association = new HashSet<Association>();
         }

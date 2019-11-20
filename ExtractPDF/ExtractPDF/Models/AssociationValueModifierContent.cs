@@ -3,19 +3,16 @@ using System.Collections.Generic;
 
 namespace ExtractPDF.Models
 {
-    public partial class AssociationValue
+    public partial class AssociationValueModifierContent
     {
-        public AssociationValue()
+        public AssociationValueModifierContent()
         {
             AssociationValueModifier = new HashSet<AssociationValueModifier>();
         }
 
         public int Id { get; set; }
-        public int AssociationValueContentId { get; set; }
-        public int AssociationId { get; set; }
+        public string Value { get; set; }
 
-        public Association Association { get; set; }
-        public AssociationValueContent AssociationValueContent { get; set; }
         public ICollection<AssociationValueModifier> AssociationValueModifier { get; set; }
     }
 }
