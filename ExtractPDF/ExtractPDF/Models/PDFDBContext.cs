@@ -16,8 +16,13 @@ namespace ExtractPDF.Models
         }
 
         public virtual DbSet<Article> Article { get; set; }
+        public virtual DbSet<ArticleModifier> ArticleModifier { get; set; }
+        public virtual DbSet<ArticleModifierContent> ArticleModifierContent { get; set; }
         public virtual DbSet<Association> Association { get; set; }
-        public virtual DbSet<ContentValue> ContentValue { get; set; }
+        public virtual DbSet<AssociationType> AssociationType { get; set; }
+        public virtual DbSet<AssociationTypeContent> AssociationTypeContent { get; set; }
+        public virtual DbSet<AssociationValue> AssociationValue { get; set; }
+        public virtual DbSet<AssociationValueContent> AssociationValueContent { get; set; }
 
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {
@@ -31,21 +36,36 @@ namespace ExtractPDF.Models
         {
             modelBuilder.Entity<Article>(entity =>
             {
-                entity.HasOne(d => d.ArticleContent)
-                    .WithMany(p => p.ArticleArticleContent)
-                    .HasForeignKey(d => d.ArticleContentId)
-                    .OnDelete(DeleteBehavior.ClientSetNull)
-                    .HasConstraintName("FK_ArticleContentId_ContentValue");
+                entity.Property(e => e.Name)
+                    .IsRequired()
+                    .HasMaxLength(100);
 
-                entity.HasOne(d => d.ArticleExtensionContent)
-                    .WithMany(p => p.ArticleArticleExtensionContent)
-                    .HasForeignKey(d => d.ArticleExtensionContentId)
-                    .HasConstraintName("FK_ArticleExtensionContentId_ContentValue");
+                entity.HasOne(d => d.Parent)
+                    .WithMany(p => p.InverseParent)
+                    .HasForeignKey(d => d.ParentId)
+                    .HasConstraintName("FK_ArticleParentId_Article");
+            });
+
+            modelBuilder.Entity<ArticleModifier>(entity =>
+            {
+                entity.HasOne(d => d.Article)
+                    .WithMany(p => p.ArticleModifier)
+                    .HasForeignKey(d => d.ArticleId)
+                    .OnDelete(DeleteBehavior.ClientSetNull)
+                    .HasConstraintName("FK_ArticleModifier_ArticleId");
 
                 entity.HasOne(d => d.ArticleModifierContent)
-                    .WithMany(p => p.ArticleArticleModifierContent)
+                    .WithMany(p => p.ArticleModifier)
                     .HasForeignKey(d => d.ArticleModifierContentId)
-                    .HasConstraintName("FK_ArticleModifierContentId_ContentValue");
+                    .OnDelete(DeleteBehavior.ClientSetNull)
+                    .HasConstraintName("FK_ArticleModifier_ArticleModifierContentId");
+            });
+
+            modelBuilder.Entity<ArticleModifierContent>(entity =>
+            {
+                entity.Property(e => e.Value)
+                    .IsRequired()
+                    .HasMaxLength(100);
             });
 
             modelBuilder.Entity<Association>(entity =>
@@ -54,27 +74,47 @@ namespace ExtractPDF.Models
                     .WithMany(p => p.Association)
                     .HasForeignKey(d => d.ArticleId)
                     .OnDelete(DeleteBehavior.ClientSetNull)
-                    .HasConstraintName("FK_AssociationArticleId_Article");
+                    .HasConstraintName("FK_Association_ArticleId");
 
-                entity.HasOne(d => d.AssociationTypeContent)
-                    .WithMany(p => p.AssociationAssociationTypeContent)
-                    .HasForeignKey(d => d.AssociationTypeContentId)
+                entity.HasOne(d => d.AssociationType)
+                    .WithMany(p => p.Association)
+                    .HasForeignKey(d => d.AssociationTypeId)
                     .OnDelete(DeleteBehavior.ClientSetNull)
-                    .HasConstraintName("FK_AssociationTypeContentId_ContentValue");
+                    .HasConstraintName("FK_Association_AssociationTypeId");
 
-                entity.HasOne(d => d.AssociationValueContent)
-                    .WithMany(p => p.AssociationAssociationValueContent)
-                    .HasForeignKey(d => d.AssociationValueContentId)
+                entity.HasOne(d => d.AssociationValue)
+                    .WithMany(p => p.Association)
+                    .HasForeignKey(d => d.AssociationValueId)
                     .OnDelete(DeleteBehavior.ClientSetNull)
-                    .HasConstraintName("FK_AssociationValueContentId_ContentValue");
-
-                entity.HasOne(d => d.AssociationValueModifierContent)
-                    .WithMany(p => p.AssociationAssociationValueModifierContent)
-                    .HasForeignKey(d => d.AssociationValueModifierContentId)
-                    .HasConstraintName("FK_AssociationValueModifierContentId_ContentValue");
+                    .HasConstraintName("FK_Association_AssociationValueId");
             });
 
-            modelBuilder.Entity<ContentValue>(entity =>
+            modelBuilder.Entity<AssociationType>(entity =>
+            {
+                entity.HasOne(d => d.AssociationTypeContent)
+                    .WithMany(p => p.AssociationType)
+                    .HasForeignKey(d => d.AssociationTypeContentId)
+                    .OnDelete(DeleteBehavior.ClientSetNull)
+                    .HasConstraintName("FK_AssociationType_AssociationTypeContentId");
+            });
+
+            modelBuilder.Entity<AssociationTypeContent>(entity =>
+            {
+                entity.Property(e => e.Value)
+                    .IsRequired()
+                    .HasMaxLength(100);
+            });
+
+            modelBuilder.Entity<AssociationValue>(entity =>
+            {
+                entity.HasOne(d => d.AssociationValueContent)
+                    .WithMany(p => p.AssociationValue)
+                    .HasForeignKey(d => d.AssociationValueContentId)
+                    .OnDelete(DeleteBehavior.ClientSetNull)
+                    .HasConstraintName("FK_AssociationValue_AssociationValueContentId");
+            });
+
+            modelBuilder.Entity<AssociationValueContent>(entity =>
             {
                 entity.Property(e => e.Value)
                     .IsRequired()

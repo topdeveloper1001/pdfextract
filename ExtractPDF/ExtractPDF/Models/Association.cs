@@ -7,13 +7,11 @@ namespace ExtractPDF.Models
     {
         public int Id { get; set; }
         public int ArticleId { get; set; }
-        public int AssociationTypeContentId { get; set; }
-        public int AssociationValueContentId { get; set; }
-        public int? AssociationValueModifierContentId { get; set; }
+        public int AssociationTypeId { get; set; }
+        public int AssociationValueId { get; set; }
 
         public Article Article { get; set; }
-        public ContentValue AssociationTypeContent { get; set; }
-        public ContentValue AssociationValueContent { get; set; }
-        public ContentValue AssociationValueModifierContent { get; set; }
+        public AssociationType AssociationType { get; set; }
+        public AssociationValue AssociationValue { get; set; }
     }
 }
