@@ -1,7 +1,7 @@
 ﻿
 // NOTE: Generated code may require at least .NET Framework 4.5 or .NET Core/Standard 2.0.
 /// <remarks/>
-
+using System.Collections.Generic;
 namespace ExtractPDF.Helper
 {
     [System.Xml.Serialization.XmlTypeAttribute(AnonymousType = true)]
@@ -274,5 +274,7 @@ namespace ExtractPDF.Helper
             }
         }
     }
+
+    
 
 }
