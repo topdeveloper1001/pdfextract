@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Text;
 using ExtractPDF.Helper;
 using ExtractPDF.Models;
-
+using System.IO;
 namespace ExtractPDF
 {
     public class ParsingService
@@ -11,24 +11,32 @@ namespace ExtractPDF
         private List<LineDataOfPage> pageData;  // entire page data
         private LineDataOfPage page;    // current processing page
         private Line line;  // current processing line.  
-        private string article; // current article. when article is empty, all non-article data will be ignored.
-        private string articleEx;   // current extend article.
-        private StringBuilder result;   // variable for log.
+        private ProcessingArticle article; // current article. when article is empty, all non-article data will be ignored.
+        
         private ProcessingColumn left;   //  left column data.
         private ProcessingColumn right;  //  right column data.
 
         private const string Regular = "ArialMT"; // this font is used in association value.
         private const string Italic = "Arial-ItalicMT";   //  this font is used in association type. and some case of association value modifier.
         private const string Bold = "Arial-BoldItalicMT"; //  this font is used in article extension.
+        private const string Continue = "continued";
+        private StreamWriter writer;
         public ParsingService(List<LineDataOfPage> data)
         {
             //  initializing.
             pageData = data;
-            article = "";
-            articleEx = "";
-            result = new StringBuilder();
+            article = InitializeProcessingArticle();
+                       
             left = InitializeProcessingColumn();
             right = InitializeProcessingColumn();
+           
+            
+        }
+        public void Log(string logMessage)
+        {
+            
+            writer.WriteLine(logMessage);
+            
         }
         private ProcessingColumn InitializeProcessingColumn()
         {
@@ -41,17 +49,32 @@ namespace ExtractPDF
                 
             };
         }
+        private ProcessingArticle InitializeProcessingArticle()
+        {
+            return new ProcessingArticle
+            {
+                Article = "",
+                Extension = "",
+                Modifiers = new List<string>()
+
+            };
+        }
         //  process all pages
         public void Process()
         {
-            foreach(var pg in pageData)
-            {
-                page = pg;
 
-                ProcessPage();
+            using (writer = File.AppendText("log.txt"))
+            {
+                Log($"Script Running! ==================={DateTime.Now.ToLongTimeString()} {DateTime.Now.ToLongDateString()}===============");
+                foreach (var pg in pageData)
+                {
+                    page = pg;
+
+                    ProcessPage();
+                }
+                left = ProcessColumn(left);
+                right = ProcessColumn(right);
             }
-            ProcessColumn(left);
-            ProcessColumn(right);
         }
         // process current page.
         private void ProcessPage()
@@ -68,27 +91,26 @@ namespace ExtractPDF
             //  check whether current line is for article or not.
             if (CheckArticleLine())
             {
-                ProcessColumn(left);
-                ProcessColumn(right);
-                article = GetEntireLineText();
+                left = ProcessColumn(left);
+                right = ProcessColumn(right);
 
-                result.AppendLine($">>Article Added. Article : {article}");
+                ProcessArticle();
 
                 return;
             }
 
             // ignoring all non-article lines if article was not set yet.
-            if (string.IsNullOrEmpty(article))
+            if (string.IsNullOrEmpty(article.Article))
                 return;
 
             //  check whether current line is for article extension or not.
             if (CheckExtendArticleLine())
             {
-                ProcessColumn(left);
-                ProcessColumn(right);
-                articleEx = GetEntireLineText();
+                left = ProcessColumn(left);
+                right = ProcessColumn(right);
+                article.Extension = GetEntireLineText();
 
-                result.AppendLine($">>Extend Article Added. Extend Article : {articleEx}, Article : {article}");
+                Log($">>Extend Article Added. Extend Article : {article.Extension}, Parent Article : {article.Article}");
 
                 return;
             }
@@ -152,7 +174,7 @@ namespace ExtractPDF
                         {
                             if (column.Type == "")  // In case of association value without assocciation type. this is buggy.
                             {
-                                result.AppendLine($"--------------Error is occurred : association value setting without association type. value : {word.Text}");
+                                Log($"--------------Error is occurred : association value setting without association type. value : {word.Text}");
                                 break;
                             }
                             if(column.IsValueEmpty) // In case of type field end and start value field.
@@ -160,11 +182,11 @@ namespace ExtractPDF
                                 if (column.Type[column.Type.Length - 1] == ':')
                                 {
                                     column.Type = column.Type.Substring(0, column.Type.Length - 1);
-                                    result.AppendLine($">>>> Association Type Added. Type : {column.Type},  Article : {article}");
+                                    Log($">>>> Association Type Added. Type : {column.Type},  Article : {article.Article}");
                                 }
                                 else
                                 {
-                                    result.AppendLine($"--------------Error is occurred : wrong association type. type : {word.Text}");
+                                    Log($"--------------Error is occurred : wrong association type. type : {word.Text}");
                                 }
                             }
 
@@ -193,6 +215,40 @@ namespace ExtractPDF
             }
             return column;
         }
+        private void ProcessArticle()
+        {
+            string art = GetEntireLineText();
+            article = InitializeProcessingArticle();
+            if(art.IndexOf('(') >= 0)   // In case of there's some modifier or continued for article
+            {
+                
+                string modifier = art.Substring(art.IndexOf('(') + 1, art.IndexOf(')') - art.IndexOf('(') - 1);
+                article.Article = art.Substring(0, art.IndexOf('(') - 1);
+                if (modifier == Continue)
+                {
+                    Log($">>Article Continuing. Article : {article.Article}");
+                    return;
+                }
+                else
+                {
+                    Log($">>Article Added. Article : {article.Article}");
+                }
+                foreach (var item in modifier.Split(','))
+                {
+                    article.Modifiers.Add(item);
+                    Log($">>Article Modifier Added. Modifier : {item}, Article : {article.Article}");
+                }
+            }
+            else
+            {
+                article.Article = art;
+                Log($">>Article Added. Article : {article.Article}");
+            }
+
+            
+            
+
+        }
         private ProcessingColumn ProcessColumn(ProcessingColumn column)
         {
             if (column.IsValueEmpty)
@@ -204,7 +260,44 @@ namespace ExtractPDF
             }
             foreach (var v in column.Values)
             {
-                result.AppendLine($">>>>>> Association Value Added. Value : {v}, Type : {column.Type},  Article : {article}");
+                if (v.IndexOf('(') >= 0)    // In case of there's some modifier or continued for association value
+                {
+                    string modifier = v.Substring(v.IndexOf('(') + 1, v.IndexOf(')') - v.IndexOf('(') - 1);
+                    string val = v.Substring(0, v.IndexOf('(') - 1);
+                    if (article.Extension == "") // no extension
+                    {
+                        Log($">>>>>> Association Value Added. Value : {val}, Type : {column.Type}, Article : {article.Article}");
+                    }
+                    else
+                    {
+                        // In case of article is extension.
+                        Log($">>>>>> Association Value Added. Value : {val}, Type : {column.Type}, Extend Article : {article.Extension}, Parent Article : {article.Article}");
+                    }
+                    
+                    foreach (var item in modifier.Split(','))
+                    {
+                        if (article.Extension == "") // no extension
+                        {
+                            Log($">>>>>> Association Value Modifier Added. Modifier : {item}, Value : {val}, Type : {column.Type},  Article : {article.Article}");
+                        }
+                        else
+                        {
+                            // In case of article is extension.
+                            Log($">>>>>> Association Value Modifier Added. Modifier : {item}, Value : {val}, Type : {column.Type}, Extend Article : {article.Extension}, Parent Article : {article.Article}");
+                        }
+                    }
+                }
+                else
+                {
+                    if (article.Extension == "") // no extension
+                    {
+                        Log($">>>>>> Association Value Added. Value : {v}, Type : {column.Type}, Article : {article.Article}");
+                    }
+                    else
+                    {
+                        Log($">>>>>> Association Value Added. Value : {v}, Type : {column.Type}, Extend Article : {article.Extension}, Parent Article : {article.Article}");
+                    }
+                }
             }
             return InitializeProcessingColumn();
         }
@@ -254,5 +347,11 @@ namespace ExtractPDF
                 return isEmpty;
             }
         }
+    }
+    public class ProcessingArticle
+    {
+        public string Article { get; set; }
+        public string Extension { get; set; }
+        public List<string> Modifiers { get; set; }
     }
 }
