@@ -25,8 +25,8 @@ namespace ExtractPDF
             // it is container of data. it will be used in parsing engine.
             List<Helper.LineDataOfPage> lstPages = new List<Helper.LineDataOfPage>();
 
-            using (PDFDoc doc = new PDFDoc("Article Dev Data Set.pdf"))
-            //using (PDFDoc doc = new PDFDoc("Spec Sample Pages.pdf"))
+            using (PDFDoc doc = new PDFDoc("All Articles dev data set.pdf"))
+            //using (PDFDoc doc = new PDFDoc("Article Dev Data Set.pdf"))
             {
                 doc.InitSecurityHandler();
                 int pagecount = doc.GetPageCount();

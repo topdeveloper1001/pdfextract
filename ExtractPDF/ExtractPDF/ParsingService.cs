@@ -12,7 +12,7 @@ namespace ExtractPDF
         private LineDataOfPage page;    // current processing page
         private Line line;  // current processing line.  
         private ProcessingArticle article; // current article. when article is empty, all non-article data will be ignored.
-        
+        private string tempArticle; //  it will be used for multiple-line article names
         private ProcessingColumn left;   //  left column data.
         private ProcessingColumn right;  //  right column data.
 
@@ -26,7 +26,7 @@ namespace ExtractPDF
             //  initializing.
             pageData = data;
             article = InitializeProcessingArticle();
-                       
+            tempArticle = "";
             left = InitializeProcessingColumn();
             right = InitializeProcessingColumn();
            
@@ -82,22 +82,44 @@ namespace ExtractPDF
             foreach(var ln in page.LineList)
             {
                 line = ln;
-                ProcessLine();
+                //  check whether current line is for article or not.
+                if (CheckArticleLine())
+                {
+                    // if current line is article line, then should check it has multi-lines or not. so save it to tempArticle temperarilly.
+                    if (tempArticle == "")
+                    {
+                        //  should process columns when new article start.
+                        left = ProcessColumn(left);
+                        right = ProcessColumn(right);
+                        // save article name to tempArticle.
+                        tempArticle = GetEntireLineText();
+                    }
+                    else
+                    {
+                        // In case of previous line is article line. so current article is surely multi-line at this point.
+                        tempArticle += " " + GetEntireLineText();
+                    }
+                    
+                }
+                else
+                {
+                    if (tempArticle != "")
+                    {
+                        // In case of article lines were ended at previous line. so should process article.
+                        ProcessArticle();
+                        tempArticle = "";
+                    }
+                    
+                    //  process non-article line.
+                    ProcessLine();
+                    
+                }
             }
         }
         //process current line;
         private void ProcessLine()
         {
-            //  check whether current line is for article or not.
-            if (CheckArticleLine())
-            {
-                left = ProcessColumn(left);
-                right = ProcessColumn(right);
-
-                ProcessArticle();
-
-                return;
-            }
+            
 
             // ignoring all non-article lines if article was not set yet.
             if (string.IsNullOrEmpty(article.Article))
@@ -141,16 +163,19 @@ namespace ExtractPDF
                             {
                                 if(column.IsModifier == true || word.Text.IndexOf('(') >= 0)    // In case of association value modifier
                                 {
+                                    // If find '(' character, then it will be modifier.
                                     column.Value += (column.Value == "" ? "" : " ") + word.Text;
                                     
                                     column.IsModifier = true;
                                     
                                     if (column.Value.IndexOf(')') >= 0)
                                     {
+                                        // If find ')' character, then modifier will be ended.
                                         column.IsModifier = false;
                                     }
                                     if (column.IsModifier == false)
                                     {
+                                        // If find ',' character, then association value is ended. so add value.
                                         if (column.Value[column.Value.Length - 1] == ',')
                                         {
                                             column.Values.Add(column.Value.Substring(0, column.Value.Length - 1));
@@ -217,7 +242,7 @@ namespace ExtractPDF
         }
         private void ProcessArticle()
         {
-            string art = GetEntireLineText();
+            string art = tempArticle;
             article = InitializeProcessingArticle();
             if(art.IndexOf('(') >= 0)   // In case of there's some modifier or continued for article
             {
@@ -309,7 +334,7 @@ namespace ExtractPDF
             if (line.Box.X < 100)
                 return res;
             double guessingWidth = line.Box.X * 2 + line.Box.Width;
-            if (guessingWidth > page.PageWidth - 2 && guessingWidth < page.PageWidth + 2)
+            if (guessingWidth > page.PageWidth - 7 && guessingWidth < page.PageWidth + 7)
                 res = true;
             return res;
         }
