@@ -21,6 +21,8 @@ namespace ExtractPDF
         private const string Bold = "Arial-BoldItalicMT"; //  this font is used in article extension.
         private const string Continue = "continued";
         private StreamWriter writer;
+        private DataAccessService daService;
+        private PDFDBContext dbContext;
         public ParsingService(List<LineDataOfPage> data)
         {
             //  initializing.
@@ -29,7 +31,8 @@ namespace ExtractPDF
             tempArticle = "";
             left = InitializeProcessingColumn();
             right = InitializeProcessingColumn();
-           
+            dbContext = new PDFDBContext();
+            daService = new DataAccessService(dbContext);
             
         }
         public void Log(string logMessage)
@@ -53,6 +56,8 @@ namespace ExtractPDF
         {
             return new ProcessingArticle
             {
+                Id = 0,
+                ParentId = 0,
                 Article = "",
                 Extension = "",
                 Modifiers = new List<string>()
@@ -131,6 +136,8 @@ namespace ExtractPDF
                 left = ProcessColumn(left);
                 right = ProcessColumn(right);
                 article.Extension = GetEntireLineText();
+
+                article = daService.AddArticleExtend(article);
 
                 Log($">>Extend Article Added. Extend Article : {article.Extension}, Parent Article : {article.Article}");
 
@@ -251,6 +258,7 @@ namespace ExtractPDF
                 article.Article = art.Substring(0, art.IndexOf('(') - 1);
                 if (modifier == Continue)
                 {
+                    article.Id = daService.AddArticle(article.Article);
                     Log($">>Article Continuing. Article : {article.Article}");
                     return;
                 }
@@ -263,10 +271,12 @@ namespace ExtractPDF
                     article.Modifiers.Add(item);
                     Log($">>Article Modifier Added. Modifier : {item}, Article : {article.Article}");
                 }
+                article = daService.AddArticleWithModifiers(article);
             }
             else
             {
                 article.Article = art;
+                article.Id = daService.AddArticle(article.Article);
                 Log($">>Article Added. Article : {article.Article}");
             }
 
@@ -283,6 +293,7 @@ namespace ExtractPDF
                 column.Values.Add(column.Value);
                 column.Value = "";
             }
+            int associationId = daService.AddAssociation(article.Id, column.Type);
             foreach (var v in column.Values)
             {
                 if (v.IndexOf('(') >= 0)    // In case of there's some modifier or continued for association value
@@ -298,7 +309,7 @@ namespace ExtractPDF
                         // In case of article is extension.
                         Log($">>>>>> Association Value Added. Value : {val}, Type : {column.Type}, Extend Article : {article.Extension}, Parent Article : {article.Article}");
                     }
-                    
+                    int valId = daService.AddAssociationValue(associationId, val);
                     foreach (var item in modifier.Split(','))
                     {
                         if (article.Extension == "") // no extension
@@ -310,6 +321,7 @@ namespace ExtractPDF
                             // In case of article is extension.
                             Log($">>>>>> Association Value Modifier Added. Modifier : {item}, Value : {val}, Type : {column.Type}, Extend Article : {article.Extension}, Parent Article : {article.Article}");
                         }
+                        daService.AddAssociationValueModifier(valId, item);
                     }
                 }
                 else
@@ -322,8 +334,12 @@ namespace ExtractPDF
                     {
                         Log($">>>>>> Association Value Added. Value : {v}, Type : {column.Type}, Extend Article : {article.Extension}, Parent Article : {article.Article}");
                     }
+                    daService.AddAssociationValue(associationId, v);
                 }
             }
+
+            
+
             return InitializeProcessingColumn();
         }
         // check whether current line is for article or not.
@@ -375,6 +391,8 @@ namespace ExtractPDF
     }
     public class ProcessingArticle
     {
+        public int Id { get; set; }
+        public int ParentId { get; set; }
         public string Article { get; set; }
         public string Extension { get; set; }
         public List<string> Modifiers { get; set; }
