@@ -4,6 +4,9 @@ using System.Text;
 using ExtractPDF.Helper;
 using ExtractPDF.Models;
 using System.IO;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
+
 namespace ExtractPDF
 {
     public class ParsingService
@@ -20,27 +23,20 @@ namespace ExtractPDF
         private const string Italic = "Arial-ItalicMT";   //  this font is used in association type. and some case of association value modifier.
         private const string Bold = "Arial-BoldItalicMT"; //  this font is used in article extension.
         private const string Continue = "continued";
-        private StreamWriter writer;
+        
         private DataAccessService daService;
-        private PDFDBContext dbContext;
-        public ParsingService(List<LineDataOfPage> data)
-        {
-            //  initializing.
-            pageData = data;
-            article = InitializeProcessingArticle();
-            tempArticle = "";
-            left = InitializeProcessingColumn();
-            right = InitializeProcessingColumn();
-            dbContext = new PDFDBContext();
-            daService = new DataAccessService(dbContext);
-            
-        }
-        public void Log(string logMessage)
+        private PDFDBContext _dbContext;
+
+        private readonly ILogger _logger;
+        public ParsingService(PDFDBContext dbContext, ILogger<ParsingService> logger)
         {
             
-            writer.WriteLine(logMessage);
+            _dbContext = dbContext;
+            daService = new DataAccessService(_dbContext);
+            _logger = logger;
             
         }
+        
         private ProcessingColumn InitializeProcessingColumn()
         {
             return new ProcessingColumn
@@ -65,21 +61,27 @@ namespace ExtractPDF
             };
         }
         //  process all pages
-        public void Process()
+        public void Process(List<LineDataOfPage> data)
         {
+            //  initializing.
+            pageData = data;
+            article = InitializeProcessingArticle();
+            tempArticle = "";
+            left = InitializeProcessingColumn();
+            right = InitializeProcessingColumn();
 
-            using (writer = File.AppendText("log.txt"))
+            
+            _logger.LogInformation($"======================= Script Running! ====================");
+                
+            foreach (var pg in pageData)
             {
-                Log($"Script Running! ==================={DateTime.Now.ToLongTimeString()} {DateTime.Now.ToLongDateString()}===============");
-                foreach (var pg in pageData)
-                {
-                    page = pg;
+                page = pg;
 
-                    ProcessPage();
-                }
-                left = ProcessColumn(left);
-                right = ProcessColumn(right);
+                ProcessPage();
             }
+            left = ProcessColumn(left);
+            right = ProcessColumn(right);
+            
         }
         // process current page.
         private void ProcessPage()
@@ -139,7 +141,7 @@ namespace ExtractPDF
 
                 article = daService.AddArticleExtend(article);
 
-                Log($">>Extend Article Added. Extend Article : {article.Extension}, Parent Article : {article.Article}");
+                _logger.LogInformation($">>Extend Article Added. Extend Article : {article.Extension}, Parent Article : {article.Article}");
 
                 return;
             }
@@ -206,7 +208,7 @@ namespace ExtractPDF
                         {
                             if (column.Type == "")  // In case of association value without assocciation type. this is buggy.
                             {
-                                Log($"--------------Error is occurred : association value setting without association type. value : {word.Text}");
+                                _logger.LogError($"--------------Error is occurred : association value setting without association type. value : {word.Text}");
                                 break;
                             }
                             if(column.IsValueEmpty) // In case of type field end and start value field.
@@ -214,11 +216,12 @@ namespace ExtractPDF
                                 if (column.Type[column.Type.Length - 1] == ':')
                                 {
                                     column.Type = column.Type.Substring(0, column.Type.Length - 1);
-                                    Log($">>>> Association Type Added. Type : {column.Type},  Article : {article.Article}");
+                                    column.Type = column.Type.Trim();
+                                    _logger.LogInformation($">>>> Association Type Added. Type : {column.Type},  Article : {article.Article}");
                                 }
                                 else
                                 {
-                                    Log($"--------------Error is occurred : wrong association type. type : {word.Text}");
+                                    _logger.LogError($"--------------Error is occurred : wrong association type. type : {word.Text}");
                                 }
                             }
 
@@ -256,28 +259,29 @@ namespace ExtractPDF
                 
                 string modifier = art.Substring(art.IndexOf('(') + 1, art.IndexOf(')') - art.IndexOf('(') - 1);
                 article.Article = art.Substring(0, art.IndexOf('(') - 1);
+                article.Article = article.Article.Trim();
                 if (modifier == Continue)
                 {
                     article.Id = daService.AddArticle(article.Article);
-                    Log($">>Article Continuing. Article : {article.Article}");
+                    _logger.LogInformation($">>Article Continuing. Article : {article.Article}");
                     return;
                 }
                 else
                 {
-                    Log($">>Article Added. Article : {article.Article}");
+                    _logger.LogInformation($">>Article Added. Article : {article.Article}");
                 }
                 foreach (var item in modifier.Split(','))
                 {
-                    article.Modifiers.Add(item);
-                    Log($">>Article Modifier Added. Modifier : {item}, Article : {article.Article}");
+                    article.Modifiers.Add(item.Trim());
+                    _logger.LogInformation($">>Article Modifier Added. Modifier : {item.Trim()}, Article : {article.Article}");
                 }
                 article = daService.AddArticleWithModifiers(article);
             }
             else
             {
-                article.Article = art;
+                article.Article = art.Trim();
                 article.Id = daService.AddArticle(article.Article);
-                Log($">>Article Added. Article : {article.Article}");
+                _logger.LogInformation($">>Article Added. Article : {article.Article}");
             }
 
             
@@ -290,6 +294,7 @@ namespace ExtractPDF
                 return column;
             if (column.Value != "")
             {
+                column.Value = column.Value.Trim();
                 column.Values.Add(column.Value);
                 column.Value = "";
             }
@@ -299,42 +304,42 @@ namespace ExtractPDF
                 if (v.IndexOf('(') >= 0)    // In case of there's some modifier or continued for association value
                 {
                     string modifier = v.Substring(v.IndexOf('(') + 1, v.IndexOf(')') - v.IndexOf('(') - 1);
-                    string val = v.Substring(0, v.IndexOf('(') - 1);
+                    string val = v.Substring(0, v.IndexOf('(') - 1).Trim();
                     if (article.Extension == "") // no extension
                     {
-                        Log($">>>>>> Association Value Added. Value : {val}, Type : {column.Type}, Article : {article.Article}");
+                        _logger.LogInformation($">>>>>> Association Value Added. Value : {val}, Type : {column.Type}, Article : {article.Article}");
                     }
                     else
                     {
                         // In case of article is extension.
-                        Log($">>>>>> Association Value Added. Value : {val}, Type : {column.Type}, Extend Article : {article.Extension}, Parent Article : {article.Article}");
+                        _logger.LogInformation($">>>>>> Association Value Added. Value : {val}, Type : {column.Type}, Extend Article : {article.Extension}, Parent Article : {article.Article}");
                     }
                     int valId = daService.AddAssociationValue(associationId, val);
                     foreach (var item in modifier.Split(','))
                     {
                         if (article.Extension == "") // no extension
                         {
-                            Log($">>>>>> Association Value Modifier Added. Modifier : {item}, Value : {val}, Type : {column.Type},  Article : {article.Article}");
+                            _logger.LogInformation($">>>>>> Association Value Modifier Added. Modifier : {item.Trim()}, Value : {val}, Type : {column.Type},  Article : {article.Article}");
                         }
                         else
                         {
                             // In case of article is extension.
-                            Log($">>>>>> Association Value Modifier Added. Modifier : {item}, Value : {val}, Type : {column.Type}, Extend Article : {article.Extension}, Parent Article : {article.Article}");
+                            _logger.LogInformation($">>>>>> Association Value Modifier Added. Modifier : {item.Trim()}, Value : {val}, Type : {column.Type}, Extend Article : {article.Extension}, Parent Article : {article.Article}");
                         }
-                        daService.AddAssociationValueModifier(valId, item);
+                        daService.AddAssociationValueModifier(valId, item.Trim());
                     }
                 }
                 else
                 {
                     if (article.Extension == "") // no extension
                     {
-                        Log($">>>>>> Association Value Added. Value : {v}, Type : {column.Type}, Article : {article.Article}");
+                        _logger.LogInformation($">>>>>> Association Value Added. Value : {v.Trim()}, Type : {column.Type}, Article : {article.Article}");
                     }
                     else
                     {
-                        Log($">>>>>> Association Value Added. Value : {v}, Type : {column.Type}, Extend Article : {article.Extension}, Parent Article : {article.Article}");
+                        _logger.LogInformation($">>>>>> Association Value Added. Value : {v.Trim()}, Type : {column.Type}, Extend Article : {article.Extension}, Parent Article : {article.Article}");
                     }
-                    daService.AddAssociationValue(associationId, v);
+                    daService.AddAssociationValue(associationId, v.Trim());
                 }
             }
 

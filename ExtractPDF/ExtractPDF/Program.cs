@@ -11,22 +11,48 @@ using pdftron.PDF;
 using System.Xml;
 using System.Xml.Serialization;
 using System.Collections.Generic;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using ExtractPDF.Models;
+using Microsoft.EntityFrameworkCore;
+using Serilog;
+
 namespace ExtractPDF
 {
     class Program
     {
 
         private static pdftron.PDFNetLoader pdfNetLoader = pdftron.PDFNetLoader.Instance();
+        
         static void Main(string[] args)
-        {
-            
+        {             
+            var builder = new ConfigurationBuilder()
+                .SetBasePath(Directory.GetCurrentDirectory())
+                .AddJsonFile("appsettings.json", optional: true, reloadOnChange: true);
+
+            IConfiguration configuration = builder.Build();
+
+            Log.Logger = new LoggerConfiguration()
+                .WriteTo.File("ExtractPDF.log")
+                .MinimumLevel.Information()
+                .CreateLogger();
+            var serviceCollection = new ServiceCollection();
+            ConfigureServices(serviceCollection, configuration);
+            var serviceProvider = serviceCollection.BuildServiceProvider();
+
+            var logger = serviceProvider.GetService<ILogger<Program>>();
+
+
+            var filepath = configuration.GetSection("PDFConfig").GetValue<string>("Path");
+
             PDFNet.Initialize();
 
             // it is container of data. it will be used in parsing engine.
             List<Helper.LineDataOfPage> lstPages = new List<Helper.LineDataOfPage>();
 
-            //using (PDFDoc doc = new PDFDoc("All Articles dev data set.pdf"))
-            using (PDFDoc doc = new PDFDoc("Article Dev Data Set.pdf"))
+            using (PDFDoc doc = new PDFDoc(filepath))
+            //using (PDFDoc doc = new PDFDoc("Article Dev Data Set.pdf"))
             {
                 doc.InitSecurityHandler();
                 int pagecount = doc.GetPageCount();
@@ -36,7 +62,8 @@ namespace ExtractPDF
                     Page page = doc.GetPage(i);  //Get Page Data
                     if (page == null)
                     {
-                        Console.WriteLine("Page not found.");
+                        logger.LogError("Page not found.");
+                        
                         continue;
                     }
                     using (TextExtractor txt = new TextExtractor())
@@ -62,10 +89,23 @@ namespace ExtractPDF
             }
 
             // Run parsing module.
-            ParsingService ps = new ParsingService(lstPages);
-            ps.Process();
+            ParsingService ps = serviceProvider.GetService<ParsingService>();
+            ps.Process(lstPages);
 
         }
 
+        private static void ConfigureServices(IServiceCollection services, IConfiguration configuration)
+        {
+            //we will configure logging here
+            services.AddLogging(configure => configure.AddSerilog()
+                                                    .AddConsole()                                    
+                                            ).AddTransient<ParsingService>();
+
+
+            services.AddDbContext<PDFDBContext>(options => options.UseSqlServer(configuration.GetConnectionString("pdfdb")));
+
+        }
     }
+
+   
 }
