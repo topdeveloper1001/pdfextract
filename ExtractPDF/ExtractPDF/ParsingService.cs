@@ -301,7 +301,7 @@ namespace ExtractPDF
             int associationId = daService.AddAssociation(article.Id, column.Type);
             foreach (var v in column.Values)
             {
-                if (v.IndexOf('(') >= 0)    // In case of there's some modifier or continued for association value
+                if (v.IndexOf('(') > 0)    // In case of there's some modifier or continued for association value
                 {
                     string modifier = v.Substring(v.IndexOf('(') + 1, v.IndexOf(')') - v.IndexOf('(') - 1);
                     string val = v.Substring(0, v.IndexOf('(') - 1).Trim();
