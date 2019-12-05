@@ -72,12 +72,15 @@ namespace ExtractPDF
 
             
             _logger.LogInformation($"======================= Script Running! ====================");
-                
+            int pageNumber = 1;
             foreach (var pg in pageData)
             {
+                _logger.LogInformation($"======================= Page {pageNumber} Processing ====================");
                 page = pg;
 
                 ProcessPage();
+
+                pageNumber++;
             }
             left = ProcessColumn(left);
             right = ProcessColumn(right);
@@ -252,98 +255,111 @@ namespace ExtractPDF
         }
         private void ProcessArticle()
         {
-            string art = tempArticle;
-            article = InitializeProcessingArticle();
-            if(art.IndexOf('(') >= 0)   // In case of there's some modifier or continued for article
+            try
             {
-                
-                string modifier = art.Substring(art.IndexOf('(') + 1, art.IndexOf(')') - art.IndexOf('(') - 1);
-                article.Article = art.Substring(0, art.IndexOf('(') - 1);
-                article.Article = article.Article.Trim();
-                if (modifier == Continue)
+                string art = tempArticle;
+                article = InitializeProcessingArticle();
+                if (art.IndexOf('(') >= 0)   // In case of there's some modifier or continued for article
                 {
-                    article.Id = daService.AddArticle(article.Article);
-                    _logger.LogInformation($">>Article Continuing. Article : {article.Article}");
-                    return;
+
+                    string modifier = art.Substring(art.IndexOf('(') + 1, art.IndexOf(')') - art.IndexOf('(') - 1);
+                    article.Article = art.Substring(0, art.IndexOf('(') - 1);
+                    article.Article = article.Article.Trim();
+                    if (modifier == Continue)
+                    {
+                        article.Id = daService.AddArticle(article.Article);
+                        _logger.LogInformation($">>Article Continuing. Article : {article.Article}");
+                        return;
+                    }
+                    else
+                    {
+                        _logger.LogInformation($">>Article Added. Article : {article.Article}");
+                    }
+                    foreach (var item in modifier.Split(','))
+                    {
+                        article.Modifiers.Add(item.Trim());
+                        _logger.LogInformation($">>Article Modifier Added. Modifier : {item.Trim()}, Article : {article.Article}");
+                    }
+                    article = daService.AddArticleWithModifiers(article);
                 }
                 else
                 {
+                    article.Article = art.Trim();
+                    article.Id = daService.AddArticle(article.Article);
                     _logger.LogInformation($">>Article Added. Article : {article.Article}");
                 }
-                foreach (var item in modifier.Split(','))
-                {
-                    article.Modifiers.Add(item.Trim());
-                    _logger.LogInformation($">>Article Modifier Added. Modifier : {item.Trim()}, Article : {article.Article}");
-                }
-                article = daService.AddArticleWithModifiers(article);
+
             }
-            else
+            catch (Exception ex)
             {
-                article.Article = art.Trim();
-                article.Id = daService.AddArticle(article.Article);
-                _logger.LogInformation($">>Article Added. Article : {article.Article}");
+                _logger.LogError(ex.Message);
             }
 
-            
-            
+
 
         }
         private ProcessingColumn ProcessColumn(ProcessingColumn column)
         {
-            if (column.IsValueEmpty)
-                return column;
-            if (column.Value != "")
+            try
             {
-                column.Value = column.Value.Trim();
-                column.Values.Add(column.Value);
-                column.Value = "";
-            }
-            int associationId = daService.AddAssociation(article.Id, column.Type);
-            foreach (var v in column.Values)
-            {
-                if (v.IndexOf('(') > 0)    // In case of there's some modifier or continued for association value
+                if (column.IsValueEmpty)
+                    return column;
+                if (column.Value != "")
                 {
-                    string modifier = v.Substring(v.IndexOf('(') + 1, v.IndexOf(')') - v.IndexOf('(') - 1);
-                    string val = v.Substring(0, v.IndexOf('(') - 1).Trim();
-                    if (article.Extension == "") // no extension
+                    column.Value = column.Value.Trim();
+                    column.Values.Add(column.Value);
+                    column.Value = "";
+                }
+                int associationId = daService.AddAssociation(article.Id, column.Type);
+                foreach (var v in column.Values)
+                {
+                    if (v.IndexOf('(') > 0)    // In case of there's some modifier or continued for association value
                     {
-                        _logger.LogInformation($">>>>>> Association Value Added. Value : {val}, Type : {column.Type}, Article : {article.Article}");
-                    }
-                    else
-                    {
-                        // In case of article is extension.
-                        _logger.LogInformation($">>>>>> Association Value Added. Value : {val}, Type : {column.Type}, Extend Article : {article.Extension}, Parent Article : {article.Article}");
-                    }
-                    int valId = daService.AddAssociationValue(associationId, val);
-                    foreach (var item in modifier.Split(','))
-                    {
+                        string modifier = v.Substring(v.IndexOf('(') + 1, v.IndexOf(')') - v.IndexOf('(') - 1);
+                        string val = v.Substring(0, v.IndexOf('(') - 1).Trim();
                         if (article.Extension == "") // no extension
                         {
-                            _logger.LogInformation($">>>>>> Association Value Modifier Added. Modifier : {item.Trim()}, Value : {val}, Type : {column.Type},  Article : {article.Article}");
+                            _logger.LogInformation($">>>>>> Association Value Added. Value : {val}, Type : {column.Type}, Article : {article.Article}");
                         }
                         else
                         {
                             // In case of article is extension.
-                            _logger.LogInformation($">>>>>> Association Value Modifier Added. Modifier : {item.Trim()}, Value : {val}, Type : {column.Type}, Extend Article : {article.Extension}, Parent Article : {article.Article}");
+                            _logger.LogInformation($">>>>>> Association Value Added. Value : {val}, Type : {column.Type}, Extend Article : {article.Extension}, Parent Article : {article.Article}");
                         }
-                        daService.AddAssociationValueModifier(valId, item.Trim());
-                    }
-                }
-                else
-                {
-                    if (article.Extension == "") // no extension
-                    {
-                        _logger.LogInformation($">>>>>> Association Value Added. Value : {v.Trim()}, Type : {column.Type}, Article : {article.Article}");
+                        int valId = daService.AddAssociationValue(associationId, val);
+                        foreach (var item in modifier.Split(','))
+                        {
+                            if (article.Extension == "") // no extension
+                            {
+                                _logger.LogInformation($">>>>>> Association Value Modifier Added. Modifier : {item.Trim()}, Value : {val}, Type : {column.Type},  Article : {article.Article}");
+                            }
+                            else
+                            {
+                                // In case of article is extension.
+                                _logger.LogInformation($">>>>>> Association Value Modifier Added. Modifier : {item.Trim()}, Value : {val}, Type : {column.Type}, Extend Article : {article.Extension}, Parent Article : {article.Article}");
+                            }
+                            daService.AddAssociationValueModifier(valId, item.Trim());
+                        }
                     }
                     else
                     {
-                        _logger.LogInformation($">>>>>> Association Value Added. Value : {v.Trim()}, Type : {column.Type}, Extend Article : {article.Extension}, Parent Article : {article.Article}");
+                        if (article.Extension == "") // no extension
+                        {
+                            _logger.LogInformation($">>>>>> Association Value Added. Value : {v.Trim()}, Type : {column.Type}, Article : {article.Article}");
+                        }
+                        else
+                        {
+                            _logger.LogInformation($">>>>>> Association Value Added. Value : {v.Trim()}, Type : {column.Type}, Extend Article : {article.Extension}, Parent Article : {article.Article}");
+                        }
+                        daService.AddAssociationValue(associationId, v.Trim());
                     }
-                    daService.AddAssociationValue(associationId, v.Trim());
                 }
-            }
 
-            
+            }
+            catch(Exception ex)
+            {
+                _logger.LogError(ex.Message);
+            }
 
             return InitializeProcessingColumn();
         }

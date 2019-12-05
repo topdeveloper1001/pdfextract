@@ -35,7 +35,7 @@ namespace ExtractPDF
 
             Log.Logger = new LoggerConfiguration()
                 .WriteTo.File("ExtractPDF.log")
-                .MinimumLevel.Information()
+                .ReadFrom.Configuration(configuration)
                 .CreateLogger();
             var serviceCollection = new ServiceCollection();
             ConfigureServices(serviceCollection, configuration);
@@ -98,7 +98,6 @@ namespace ExtractPDF
         {
             //we will configure logging here
             services.AddLogging(configure => configure.AddSerilog()
-                                                    .AddConsole()                                    
                                             ).AddTransient<ParsingService>();
 
 
