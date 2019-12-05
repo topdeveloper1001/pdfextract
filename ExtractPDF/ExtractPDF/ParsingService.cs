@@ -352,6 +352,13 @@ namespace ExtractPDF
         private bool CheckArticleLine()
         {
             bool res = false;
+            if (line.Font != Regular)
+                return res;
+            foreach(var word in line.WordList)
+            {
+                if (word.Font != Regular)
+                    return res;
+            }
             if (line.Box.X < 100)
                 return res;
             double guessingWidth = line.Box.X * 2 + line.Box.Width;
